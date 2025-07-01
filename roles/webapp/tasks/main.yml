@@ -1,0 +1,114 @@
+---
+- name: Install system dependencies
+  apt:
+    name:
+      - apache2
+      - python3-pip
+      - python3-venv
+      - libapache2-mod-wsgi-py3
+      - libjpeg-dev
+      - zlib1g-dev
+    state: present
+    update_cache: yes
+
+- name: Create virtual environment
+  command: python3 -m venv "{{ app_dir }}/venv"
+  args:
+    creates: "{{ app_dir }}/venv/bin/activate"
+
+- name: Install Python packages via pip in venv
+  pip:
+    name: Pillow
+    executable: "{{ app_dir }}/venv/bin/pip"
+    state: present
+
+- name: Set global permissions for webapp directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    mode: 0775
+    owner: www-data
+    group: www-data
+    recurse: yes  # Важно: рекурсивное применение прав
+
+- name: Create app directories structure
+  file:
+    path: "{{ app_dir }}/{{ item }}"
+    state: directory
+    mode: 0775
+    owner: www-data
+    group: www-data
+  loop:
+    - "cgi-bin"
+    - "original"
+    - "converted"
+    - "html"
+
+- name: Copy HTML files with correct permissions
+  copy:
+    src: "{{ item }}"
+    dest: "{{ app_dir }}/html/"
+    owner: www-data
+    group: www-data
+    mode: 0644
+  loop:
+    - "files/default.html"
+    - "files/result.html"
+    - "files/error.html"
+
+- name: Set permissions for media directories
+  file:
+    path: "{{ app_dir }}/{{ item }}"
+    state: directory
+    mode: 0775
+    owner: www-data
+    group: www-data
+    recurse: yes
+  loop:
+    - "converted"
+    - "original"
+
+- name: Deploy CGI script with executable permissions
+  copy:
+    src: files/converter
+    dest: "{{ app_dir }}/cgi-bin/converter"
+    mode: 0755  # Обязательно: права на исполнение
+    owner: www-data
+    group: www-data
+
+- name: Configure Apache virtual host
+  template:
+    src: templates/webapp.conf.j2
+    dest: "/etc/apache2/sites-available/{{ domain }}.conf"
+    owner: root
+    group: root
+    mode: 0644
+  notify: Restart Apache
+
+- name: Enable required Apache modules
+  command: "a2enmod {{ item }}"
+  loop:
+    - cgi
+    - rewrite
+  notify: Restart Apache
+
+- name: Enable site configuration
+  command: "a2ensite {{ domain }}.conf"
+  notify: Restart Apache
+
+- name: Disable default Apache site
+  command: "a2dissite 000-default.conf"
+  notify: Restart Apache
+
+- name: Ensure SELinux is not blocking (if enabled)
+  command: setenforce 0
+  when: ansible_selinux.status == "enabled"
+  ignore_errors: yes
+  changed_when: false
+  notify: Restart Apache
+
+- name: Verify Apache configuration
+  command: apache2ctl configtest
+  register: apache_test
+  changed_when: false
+  failed_when: apache_test.rc != 0

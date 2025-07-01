@@ -1,0 +1,10 @@
+---
+- name: Deploy Image Converter WebApp
+  hosts: srv1
+  become: yes
+  vars:
+    app_dir: /var/www/webapp
+    domain: "{{ hostvars['srv1']['domain'] }}"
+
+  roles:
+    - webapp

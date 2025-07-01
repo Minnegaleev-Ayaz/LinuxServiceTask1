@@ -1,0 +1,73 @@
+#!/var/www/webapp/venv/bin/python
+import os
+import cgi
+import cgitb
+import uuid
+from PIL import Image
+
+# Включаем отладку
+cgitb.enable()
+
+# Пути
+BASE_DIR = "/var/www/webapp"
+ORIGINAL_DIR = os.path.join(BASE_DIR, "original")
+CONVERTED_DIR = os.path.join(BASE_DIR, "converted")
+HTML_DIR = os.path.join(BASE_DIR, "html")
+
+# Создаем директории, если их нет
+os.makedirs(ORIGINAL_DIR, exist_ok=True)
+os.makedirs(CONVERTED_DIR, exist_ok=True)
+
+def error_page(message):
+    """Генерация страницы с ошибкой"""
+    with open(os.path.join(HTML_DIR, 'error.html'), 'r') as f:
+        error_html = f.read().replace('{error_message}', message)
+    print(error_html)
+    exit()
+
+def success_page(unique_name):
+    """Генерация страницы с результатом"""
+    with open(os.path.join(HTML_DIR, 'result.html'), 'r') as f:
+        result_html = f.read() \
+            .replace('{original_link}', f"/original/{unique_name}") \
+            .replace('{converted_link}', f"/converted/{unique_name}")
+    print(result_html)
+
+print("Content-Type: text/html\n")
+
+form = cgi.FieldStorage()
+
+# Проверка наличия файла
+if "image" not in form or not form["image"].filename:
+    error_page("Файл не выбран")
+
+fileitem = form["image"]
+filename = fileitem.filename.lower()
+
+# Проверка формата файла
+if not (filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png")):
+    error_page("Допустимы только файлы JPG, JPEG и PNG")
+
+# Генерация уникального имени
+ext = ".jpg" if filename.endswith((".jpg", ".jpeg")) else ".png"
+unique_name = str(uuid.uuid4()) + ext
+
+original_path = os.path.join(ORIGINAL_DIR, unique_name)
+converted_path = os.path.join(CONVERTED_DIR, unique_name)
+
+try:
+    # Сохраняем оригинал
+    with open(original_path, 'wb') as f:
+        f.write(fileitem.file.read())
+
+    # Конвертируем изображение
+    img = Image.open(original_path).convert('L')
+    img.save(converted_path)
+
+    # Выводим страницу с результатом
+    success_page(unique_name)
+
+except IOError as e:
+    error_page(f"Ошибка при обработке изображения: {e}")
+except Exception as e:
+    error_page(f"Неожиданная ошибка: {e}")

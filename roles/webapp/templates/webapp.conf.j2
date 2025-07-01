@@ -1,0 +1,29 @@
+<VirtualHost *:80>
+    ServerName {{ domain }}
+    DocumentRoot {{ app_dir }}/html
+
+    ScriptAlias /cgi-bin/ "{{ app_dir }}/cgi-bin/"
+    Alias /converted/ "{{ app_dir }}/converted/"
+    Alias /original/ "{{ app_dir }}/original/"
+
+    <Directory "{{ app_dir }}">
+        Options Indexes FollowSymLinks ExecCGI
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    <Directory "{{ app_dir }}/cgi-bin">
+        Options +ExecCGI
+        SetHandler cgi-script
+        Require all granted
+    </Directory>
+    <Directory "{{ app_dir }}/html">
+        Options -Indexes +FollowSymLinks 
+        DirectoryIndex default.html       
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ErrorLog /var/log/apache2/converter_error.log
+    CustomLog /var/log/apache2/converter_access.log combined
+</VirtualHost>
